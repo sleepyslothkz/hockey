@@ -3,33 +3,34 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Air Hockey Ultra</title>
+    <title>Air Hockey Fixed</title>
     <style>
-        body { margin: 0; background: #000; color: #fff; font-family: 'Arial', sans-serif; overflow: hidden; touch-action: none; position: fixed; width: 100%; height: 100%; }
-        canvas { display: block; touch-action: none; }
-        #menu, #overlay {
+        body { margin: 0; background: #000; color: #fff; font-family: sans-serif; overflow: hidden; touch-action: none; width: 100vw; height: 100vh; }
+        canvas { display: block; position: absolute; top: 0; left: 0; z-index: 1; }
+        #menu {
             position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
-            text-align: center; background: rgba(0,0,0,0.9); padding: 30px; border: 3px solid #0ff; border-radius: 15px; z-index: 100;
+            text-align: center; background: rgba(20, 20, 20, 0.95); padding: 40px; 
+            border: 3px solid #f06; border-radius: 20px; z-index: 100; min-width: 250px;
         }
-        #overlay { background: transparent; border: none; pointer-events: none; }
-        #countdown { font-size: 80px; font-weight: bold; text-shadow: 0 0 20px #0ff; }
         button { 
-            padding: 15px 30px; font-size: 20px; margin: 10px; cursor: pointer;
-            background: #111; color: #fff; border: 2px solid #f06; border-radius: 8px;
+            padding: 20px 40px; font-size: 22px; margin: 15px; cursor: pointer;
+            background: #000; color: #fff; border: 2px solid #0ff; border-radius: 10px;
+            font-weight: bold; width: 100%;
         }
-        #serve-msg { position: absolute; width: 100%; text-align: center; top: 45%; color: #0ff; font-size: 22px; pointer-events: none; z-index: 50; font-weight: bold; }
+        #serve-msg { position: absolute; width: 100%; text-align: center; top: 45%; color: #0ff; font-size: 24px; z-index: 50; pointer-events: none; font-weight: bold; display: none; }
+        #countdown { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); font-size: 100px; color: #fff; z-index: 60; font-weight: bold; }
     </style>
 </head>
 <body>
 
 <div id="menu">
-    <h1 style="color:#f06">HOCKEY 10x</h1>
+    <h1 style="color:#f06; margin-bottom: 30px;">HOCKEY 10x</h1>
     <button onclick="startGame(1)">ОДИН ИГРОК</button><br>
     <button onclick="startGame(2)">ДВА ИГРОКА</button>
 </div>
 
-<div id="overlay"><div id="countdown"></div></div>
-<div id="serve-msg" style="display:none;">НАЖМИ ДЛЯ ПОДАЧИ!</div>
+<div id="serve-msg">НАЖМИ ДЛЯ ПОДАЧИ!</div>
+<div id="countdown"></div>
 
 <canvas id="game"></canvas>
 
@@ -39,22 +40,6 @@
     const menu = document.getElementById('menu');
     const countdownEl = document.getElementById('countdown');
     const serveMsg = document.getElementById('serve-msg');
-
-    let audioCtx;
-    function playSound(freq, type, duration = 0.1) {
-        if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-        if (audioCtx.state === 'suspended') audioCtx.resume();
-        const osc = audioCtx.createOscillator();
-        const gain = audioCtx.createGain();
-        osc.type = type;
-        osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
-        gain.gain.setValueAtTime(0.05, audioCtx.currentTime);
-        gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + duration);
-        osc.connect(gain);
-        gain.connect(audioCtx.destination);
-        osc.start();
-        osc.stop(audioCtx.currentTime + duration);
-    }
 
     let gameMode = 1;
     let isRunning = false;
@@ -74,19 +59,20 @@
         canvas.height = window.innerHeight;
         p2.y = canvas.height - 80; 
         p1.x = p2.x = canvas.width / 2 - paddleW / 2;
+        
+        // Сразу рисуем черный фон, чтобы не было пустоты
+        ctx.fillStyle = "#000";
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
     }
-
-    window.addEventListener('resize', init);
 
     function startGame(mode) {
         gameMode = mode;
         menu.style.display = 'none';
         isRunning = true;
         p1.score = 0; p2.score = 0;
-        servingPlayer = 2;
         init();
         prepareServe();
-        requestAnimationFrame(draw);
+        draw(); 
     }
 
     function prepareServe() {
@@ -94,36 +80,21 @@
         serveMsg.style.display = 'block';
         ball.x = canvas.width / 2;
         ball.y = (servingPlayer === 1) ? p1.y + paddleH + 30 : p2.y - 30;
-        ball.dx = 0;
-        ball.dy = 0;
-        
-        if (gameMode === 1 && servingPlayer === 1) {
-            setTimeout(startCountdown, 1000);
-        }
+        ball.dx = 0; ball.dy = 0;
+        if (gameMode === 1 && servingPlayer === 1) setTimeout(startCountdown, 1000);
     }
 
     function startCountdown() {
         if (!isWaitingForServe) return;
         isWaitingForServe = false;
         serveMsg.style.display = 'none';
-        
         let count = 3;
         countdownEl.innerText = count;
-        playSound(440, 'sine');
-
         const interval = setInterval(() => {
             count--;
-            if (count > 0) {
-                countdownEl.innerText = count;
-                playSound(440, 'sine');
-            } else if (count === 0) {
-                countdownEl.innerText = "GO!";
-                playSound(880, 'sine', 0.2);
-                launchBall();
-            } else {
-                clearInterval(interval);
-                countdownEl.innerText = "";
-            }
+            if (count > 0) countdownEl.innerText = count;
+            else if (count === 0) { countdownEl.innerText = "GO!"; launchBall(); }
+            else { clearInterval(interval); countdownEl.innerText = ""; }
         }, 600);
     }
 
@@ -132,103 +103,62 @@
         ball.dy = (servingPlayer === 1) ? speed : -speed;
     }
 
-    window.addEventListener('touchstart', (e) => {
-        if (isWaitingForServe) {
-            if (gameMode === 2 || (gameMode === 1 && servingPlayer === 2)) {
-                startCountdown();
-            }
+    window.addEventListener('touchstart', () => {
+        if (isWaitingForServe && (gameMode === 2 || (gameMode === 1 && servingPlayer === 2))) {
+            startCountdown();
         }
     });
 
     window.addEventListener('touchmove', (e) => {
         for (let t of e.touches) {
-            if (gameMode === 2 && t.clientY < canvas.height * 0.4) {
-                p1.x = t.clientX - paddleW / 2;
-            } else if (t.clientY > canvas.height * 0.6) {
-                p2.x = t.clientX - paddleW / 2;
-            }
+            if (gameMode === 2 && t.clientY < canvas.height * 0.4) p1.x = t.clientX - paddleW / 2;
+            else if (t.clientY > canvas.height * 0.6) p2.x = t.clientX - paddleW / 2;
         }
-    }, { passive: false });
+    });
 
     function draw() {
         if (!isRunning) return;
-
-        // Фон
         ctx.fillStyle = "#000";
         ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-        // Линии поля
+        // Поле
         ctx.strokeStyle = "rgba(0,255,255,0.2)";
         ctx.lineWidth = 4;
         ctx.strokeRect(5, 5, canvas.width - 10, canvas.height - 10);
-        ctx.beginPath();
-        ctx.moveTo(0, canvas.height/2); ctx.lineTo(canvas.width, canvas.height/2);
-        ctx.stroke();
 
         // Счет
         ctx.fillStyle = "rgba(255,255,255,0.2)";
-        ctx.font = "bold 100px Arial";
+        ctx.font = "bold 80px Arial";
         ctx.textAlign = "center";
         ctx.fillText(p1.score, canvas.width/2, canvas.height/2 - 50);
         ctx.fillText(p2.score, canvas.width/2, canvas.height/2 + 130);
 
-        // Доски
+        // Доски и мяч
         ctx.fillStyle = "#0ff"; ctx.fillRect(p1.x, p1.y, paddleW, paddleH);
         ctx.fillStyle = "#f06"; ctx.fillRect(p2.x, p2.y, paddleW, paddleH);
-
-        // Мяч
-        ctx.beginPath();
-        ctx.arc(ball.x, ball.y, ball.radius, 0, Math.PI*2);
-        ctx.fillStyle = "#fff";
-        ctx.fill();
+        ctx.beginPath(); ctx.arc(ball.x, ball.y, ball.radius, 0, Math.PI*2);
+        ctx.fillStyle = "#fff"; ctx.fill();
 
         if (!isWaitingForServe && countdownEl.innerText === "") {
-            // ИИ
-            if (gameMode === 1) {
-                let aiTarget = ball.x - paddleW / 2;
-                p1.x += (aiTarget - p1.x) * 0.15;
-            }
-
-            ball.x += ball.dx;
-            ball.y += ball.dy;
-
-            // Стены
-            if (ball.x < ball.radius || ball.x > canvas.width - ball.radius) { 
-                ball.dx *= -1; playSound(300, 'square', 0.05); 
-            }
-
-            // Столкновения
-            if (ball.y < p1.y + paddleH + ball.radius && ball.y > p1.y && ball.x > p1.x && ball.x < p1.x + paddleW) {
-                ball.dy = speed; ball.y = p1.y + paddleH + ball.radius; playSound(600, 'sine');
-            }
-            if (ball.y > p2.y - ball.radius && ball.y < p2.y + paddleH && ball.x > p2.x && ball.x < p2.x + paddleW) {
-                ball.dy = -speed; ball.y = p2.y - ball.radius; playSound(600, 'sine');
-            }
-
-            // Голы
-            if (ball.y < -ball.radius) {
-                p2.score++; servingPlayer = 1; playSound(150, 'sawtooth', 0.3); checkWin();
-            } else if (ball.y > canvas.height + ball.radius) {
-                p1.score++; servingPlayer = 2; playSound(150, 'sawtooth', 0.3); checkWin();
-            }
+            if (gameMode === 1) p1.x += ((ball.x - paddleW/2) - p1.x) * 0.12;
+            ball.x += ball.dx; ball.y += ball.dy;
+            if (ball.x < ball.radius || ball.x > canvas.width - ball.radius) ball.dx *= -1;
+            if (ball.y < p1.y + paddleH + ball.radius && ball.y > p1.y && ball.x > p1.x && ball.x < p1.x + paddleW) { ball.dy = speed; ball.y = p1.y + paddleH + ball.radius; }
+            if (ball.y > p2.y - ball.radius && ball.y < p2.y + paddleH && ball.x > p2.x && ball.x < p2.x + paddleW) { ball.dy = -speed; ball.y = p2.y - ball.radius; }
+            if (ball.y < -ball.radius) { p2.score++; servingPlayer = 1; checkWin(); }
+            else if (ball.y > canvas.height + ball.radius) { p1.score++; servingPlayer = 2; checkWin(); }
         }
-
         requestAnimationFrame(draw);
     }
 
     function checkWin() {
         if (p1.score >= 8 || p2.score >= 8) {
-            isRunning = false;
-            setTimeout(() => {
-                alert(p1.score >= 8 ? "ПОБЕДА ВЕРХНЕГО!" : "ПОБЕДА НИЖНЕГО!");
-                location.reload(); 
-            }, 100);
-        } else {
-            prepareServe();
-        }
+            alert(p1.score >= 8 ? "ВЕРХНИЙ ВЫИГРАЛ!" : "НИЖНИЙ ВЫИГРАЛ!");
+            location.reload(); 
+        } else prepareServe();
     }
 
-    init();
+    init(); // Запуск инициализации сразу
 </script>
 </body>
 </html>
