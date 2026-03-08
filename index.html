@@ -3,28 +3,33 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Fast Hockey - Full Goals</title>
+    <title>Hockey - Fair Start</title>
     <style>
-        body { margin: 0; background: #000; color: #fff; font-family: sans-serif; overflow: hidden; touch-action: none; }
+        body { margin: 0; background: #000; color: #fff; font-family: 'Arial', sans-serif; overflow: hidden; touch-action: none; }
         canvas { display: block; }
-        #menu {
+        #menu, #overlay {
             position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
-            text-align: center; background: rgba(0,0,0,0.9); padding: 30px; border: 3px solid #ff0066; border-radius: 15px;
+            text-align: center; background: rgba(0,0,0,0.9); padding: 30px; border: 3px solid #0ff; border-radius: 15px; z-index: 10;
         }
+        #overlay { background: transparent; border: none; pointer-events: none; }
+        #countdown { font-size: 100px; color: #fff; text-shadow: 0 0 20px #0ff; }
         button { 
             padding: 15px 30px; font-size: 20px; margin: 10px; cursor: pointer;
-            background: #111; color: #fff; border: 2px solid #0ff; border-radius: 8px;
+            background: #111; color: #fff; border: 2px solid #f06; border-radius: 8px;
         }
+        #serve-msg { position: absolute; width: 100%; text-align: center; top: 45%; color: #555; font-size: 20px; pointer-events: none; }
     </style>
 </head>
 <body>
 
 <div id="menu">
-    <h1>SUPER FAST HOCKEY</h1>
-    <p>Матч до 8 голов</p>
+    <h1>HOCKEY 10x</h1>
     <button onclick="startGame(1)">Один игрок</button><br>
     <button onclick="startGame(2)">Два игрока</button>
 </div>
+
+<div id="overlay"><div id="countdown"></div></div>
+<div id="serve-msg" style="display:none;">Нажми на экран, чтобы подать!</div>
 
 <canvas id="game"></canvas>
 
@@ -32,9 +37,12 @@
     const canvas = document.getElementById('game');
     const ctx = canvas.getContext('2d');
     const menu = document.getElementById('menu');
+    const countdownEl = document.getElementById('countdown');
+    const serveMsg = document.getElementById('serve-msg');
 
     const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
     function playSound(freq, type, duration = 0.1) {
+        if (audioCtx.state === 'suspended') audioCtx.resume();
         const osc = audioCtx.createOscillator();
         const gain = audioCtx.createGain();
         osc.type = type;
@@ -49,11 +57,14 @@
 
     let gameMode = 1;
     let isRunning = false;
+    let isWaitingForServe = false;
+    let servingPlayer = 2; // Кто подает (1 - верх, 2 - низ)
+    
     const paddleW = 90; 
     const paddleH = 15;
+    const speed = 10; // Ваша скорость
     
-    // Скорость увеличена в 2 раза (было 6, стало 12)
-    let ball = { x: 0, y: 0, dx: 12, dy: 12, radius: 10 }; 
+    let ball = { x: 0, y: 0, dx: 0, dy: 0, radius: 10 }; 
     let p1 = { x: 0, y: 35, score: 0 }; 
     let p2 = { x: 0, y: 0, score: 0 };  
 
@@ -61,9 +72,10 @@
         gameMode = mode;
         menu.style.display = 'none';
         isRunning = true;
-        if (audioCtx.state === 'suspended') audioCtx.resume();
+        p1.score = 0; p2.score = 0;
+        servingPlayer = 2;
         init();
-        draw();
+        prepareServe();
     }
 
     function init() {
@@ -71,18 +83,60 @@
         canvas.height = window.innerHeight;
         p2.y = canvas.height - 50; 
         p1.x = p2.x = canvas.width / 2 - paddleW / 2;
-        p1.score = 0;
-        p2.score = 0;
-        resetBall();
     }
 
-    function resetBall() {
+    // Подготовка к подаче
+    function prepareServe() {
+        isWaitingForServe = true;
+        serveMsg.style.display = 'block';
         ball.x = canvas.width / 2;
-        ball.y = canvas.height / 2;
-        // Случайное направление, но скорость всегда 12
-        ball.dx = (Math.random() > 0.5 ? 12 : -12);
-        ball.dy = (Math.random() > 0.5 ? 12 : -12);
+        ball.y = (servingPlayer === 1) ? p1.y + paddleH + 20 : p2.y - 20;
+        ball.dx = 0;
+        ball.dy = 0;
+        
+        // Если подает ИИ (верх), он подает сам через секунду
+        if (gameMode === 1 && servingPlayer === 1) {
+            setTimeout(startCountdown, 1000);
+        }
     }
+
+    function startCountdown() {
+        if (!isWaitingForServe) return;
+        isWaitingForServe = false;
+        serveMsg.style.display = 'none';
+        
+        let count = 3;
+        countdownEl.innerText = count;
+        
+        const interval = setInterval(() => {
+            count--;
+            if (count > 0) {
+                countdownEl.innerText = count;
+                playSound(440, 'sine', 0.1);
+            } else if (count === 0) {
+                countdownEl.innerText = "GO!";
+                playSound(880, 'sine', 0.2);
+                launchBall();
+            } else {
+                clearInterval(interval);
+                countdownEl.innerText = "";
+            }
+        }, 800);
+    }
+
+    function launchBall() {
+        ball.dx = (Math.random() > 0.5 ? speed : -speed);
+        ball.dy = (servingPlayer === 1) ? speed : -speed;
+    }
+
+    window.addEventListener('touchstart', (e) => {
+        if (isWaitingForServe) {
+            // Игрок может начать подачу нажатием
+            if (gameMode === 2 || (gameMode === 1 && servingPlayer === 2)) {
+                startCountdown();
+            }
+        }
+    });
 
     window.addEventListener('touchmove', (e) => {
         for (let t of e.touches) {
@@ -99,29 +153,21 @@
         ctx.fillStyle = "#000";
         ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-        // Линия центра
-        ctx.strokeStyle = "rgba(255,255,255,0.1)";
-        ctx.setLineDash([10, 10]);
-        ctx.beginPath();
-        ctx.moveTo(0, canvas.height/2);
-        ctx.lineTo(canvas.width, canvas.height/2);
-        ctx.stroke();
-        ctx.setLineDash([]);
+        // Поле
+        ctx.strokeStyle = "rgba(0,255,255,0.1)";
+        ctx.lineWidth = 2;
+        ctx.strokeRect(0, 0, canvas.width, canvas.height);
 
         // Счет
-        ctx.fillStyle = "rgba(255,255,255,0.2)";
-        ctx.font = "bold 60px Arial";
+        ctx.fillStyle = "rgba(255,255,255,0.1)";
+        ctx.font = "bold 80px Arial";
         ctx.textAlign = "center";
-        ctx.fillText(p1.score, canvas.width/2, canvas.height/2 - 50);
-        ctx.fillText(p2.score, canvas.width/2, canvas.height/2 + 100);
+        ctx.fillText(p1.score, canvas.width/2, canvas.height/2 - 60);
+        ctx.fillText(p2.score, canvas.width/2, canvas.height/2 + 120);
 
         // Доски
-        ctx.shadowBlur = 15;
-        ctx.shadowColor = "#0ff";
         ctx.fillStyle = "#0ff"; ctx.fillRect(p1.x, p1.y, paddleW, paddleH);
-        ctx.shadowColor = "#f06";
         ctx.fillStyle = "#f06"; ctx.fillRect(p2.x, p2.y, paddleW, paddleH);
-        ctx.shadowBlur = 0;
 
         // Мяч
         ctx.beginPath();
@@ -129,60 +175,52 @@
         ctx.fillStyle = "#fff";
         ctx.fill();
 
-        // Улучшенный ИИ для высокой скорости
-        if (gameMode === 1) {
-            let aiTarget = ball.x - paddleW / 2;
-            p1.x += (aiTarget - p1.x) * 0.15; // Плавное, но быстрое слежение
+        if (!isWaitingForServe && countdownEl.innerText === "") {
+            // Движение ИИ
+            if (gameMode === 1) {
+                let aiTarget = ball.x - paddleW / 2;
+                p1.x += (aiTarget - p1.x) * 0.12;
+            }
+
+            ball.x += ball.dx;
+            ball.y += ball.dy;
+
+            if (ball.x < ball.radius || ball.x > canvas.width - ball.radius) { 
+                ball.dx *= -1; playSound(300, 'square', 0.05); 
+            }
+
+            if (ball.y < p1.y + paddleH + ball.radius && ball.y > p1.y && ball.x > p1.x && ball.x < p1.x + paddleW) {
+                ball.dy = speed; playSound(600, 'sine');
+            }
+            if (ball.y > p2.y - ball.radius && ball.y < p2.y + paddleH && ball.x > p2.x && ball.x < p2.x + paddleW) {
+                ball.dy = -speed; playSound(600, 'sine');
+            }
+
+            // Голы
+            if (ball.y < 0) {
+                p2.score++; servingPlayer = 1; playSound(150, 'sawtooth', 0.3); checkWin();
+            } else if (ball.y > canvas.height) {
+                p1.score++; servingPlayer = 2; playSound(150, 'sawtooth', 0.3); checkWin();
+            }
         }
 
-        // Движение
-        ball.x += ball.dx;
-        ball.y += ball.dy;
-
-        // Отскок от боковых стен
-        if (ball.x < ball.radius || ball.x > canvas.width - ball.radius) { 
-            ball.dx *= -1; 
-            playSound(400, 'square', 0.05); 
-        }
-
-        // Отскок от досок (верхняя)
-        if (ball.y < p1.y + paddleH + ball.radius && ball.y > p1.y && ball.x > p1.x && ball.x < p1.x + paddleW) {
-            ball.dy = Math.abs(ball.dy); 
-            ball.y = p1.y + paddleH + ball.radius; // выталкивание мяча
-            playSound(600, 'sine');
-        }
-        // Отскок от досок (нижняя)
-        if (ball.y > p2.y - ball.radius && ball.y < p2.y + paddleH && ball.x > p2.x && ball.x < p2.x + paddleW) {
-            ball.dy = -Math.abs(ball.dy); 
-            ball.y = p2.y - ball.radius; // выталкивание мяча
-            playSound(600, 'sine');
-        }
-
-        // Проверка ГОЛА (Ворота по всей длине)
-        if (ball.y < 0) {
-            p2.score++; 
-            playSound(150, 'sawtooth', 0.3); 
-            checkWin();
-        } else if (ball.y > canvas.height) {
-            p1.score++; 
-            playSound(150, 'sawtooth', 0.3); 
-            checkWin();
-        }
-
-        if (isRunning) requestAnimationFrame(draw);
+        requestAnimationFrame(draw);
     }
 
     function checkWin() {
         if (p1.score >= 8 || p2.score >= 8) {
             isRunning = false;
             setTimeout(() => {
-                alert(p1.score >= 8 ? "ВЕРХНИЙ ВЫИГРАЛ!" : "НИЖНИЙ ВЫИГРАЛ!");
+                alert(p1.score >= 8 ? "ПОБЕДА ВЕРХНЕГО!" : "ПОБЕДА НИЖНЕГО!");
                 menu.style.display = 'block';
             }, 100);
         } else {
-            resetBall();
+            prepareServe();
         }
     }
+
+    init();
+    draw();
 </script>
 </body>
 </html>
