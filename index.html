@@ -3,38 +3,53 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Air Hockey Fixed</title>
+    <title>Hockey Final</title>
     <style>
-        body { margin: 0; background: #000; color: #fff; font-family: sans-serif; overflow: hidden; touch-action: none; width: 100vw; height: 100vh; }
-        canvas { display: block; position: absolute; top: 0; left: 0; z-index: 1; }
+        /* Принудительный черный фон для всей страницы */
+        html, body { 
+            margin: 0; padding: 0; width: 100%; height: 100%; 
+            background-color: #000 !important; color: #fff; 
+            overflow: hidden; touch-action: none; font-family: sans-serif;
+        }
+        #game { position: absolute; top: 0; left: 0; z-index: 5; display: block; }
+        
+        /* Меню поверх всего */
         #menu {
             position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
-            text-align: center; background: rgba(20, 20, 20, 0.95); padding: 40px; 
-            border: 3px solid #f06; border-radius: 20px; z-index: 100; min-width: 250px;
+            width: 80%; max-width: 300px; padding: 20px;
+            background: #111; border: 4px solid #f06; border-radius: 15px;
+            text-align: center; z-index: 100; display: block;
         }
+        h1 { color: #f06; font-size: 24px; margin-top: 0; }
         button { 
-            padding: 20px 40px; font-size: 22px; margin: 15px; cursor: pointer;
-            background: #000; color: #fff; border: 2px solid #0ff; border-radius: 10px;
-            font-weight: bold; width: 100%;
+            width: 100%; padding: 20px; margin: 10px 0; 
+            font-size: 18px; font-weight: bold; cursor: pointer;
+            background: #0ff; color: #000; border: none; border-radius: 10px;
         }
-        #serve-msg { position: absolute; width: 100%; text-align: center; top: 45%; color: #0ff; font-size: 24px; z-index: 50; pointer-events: none; font-weight: bold; display: none; }
-        #countdown { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); font-size: 100px; color: #fff; z-index: 60; font-weight: bold; }
+        #countdown {
+            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            font-size: 80px; font-weight: bold; color: #fff; z-index: 150; pointer-events: none;
+        }
+        #serve-msg {
+            position: absolute; top: 40%; width: 100%; text-align: center;
+            font-size: 20px; color: #0ff; z-index: 80; pointer-events: none; display: none;
+        }
     </style>
 </head>
 <body>
 
 <div id="menu">
-    <h1 style="color:#f06; margin-bottom: 30px;">HOCKEY 10x</h1>
-    <button onclick="startGame(1)">ОДИН ИГРОК</button><br>
-    <button onclick="startGame(2)">ДВА ИГРОКА</button>
+    <h1>HOCKEY 10x</h1>
+    <button id="btn1">ОДИН ИГРОК</button>
+    <button id="btn2">ДВА ИГРОКА</button>
 </div>
 
-<div id="serve-msg">НАЖМИ ДЛЯ ПОДАЧИ!</div>
 <div id="countdown"></div>
-
+<div id="serve-msg">НАЖМИ ДЛЯ ПОДАЧИ!</div>
 <canvas id="game"></canvas>
 
 <script>
+window.onload = function() {
     const canvas = document.getElementById('game');
     const ctx = canvas.getContext('2d');
     const menu = document.getElementById('menu');
@@ -45,120 +60,130 @@
     let isRunning = false;
     let isWaitingForServe = false;
     let servingPlayer = 2; 
+    let p1Score = 0;
+    let p2Score = 0;
     
-    const paddleW = 100; 
-    const paddleH = 20;
-    const speed = 10; 
-    
-    let ball = { x: 0, y: 0, dx: 0, dy: 0, radius: 12 }; 
-    let p1 = { x: 0, y: 60, score: 0 }; 
-    let p2 = { x: 0, y: 0, score: 0 };  
+    const paddleW = 90; 
+    const paddleH = 15;
+    const ballRadius = 10;
+    const ballSpeed = 10; 
 
-    function init() {
+    let ball = { x: 0, y: 0, dx: 0, dy: 0 };
+    let p1 = { x: 0, y: 40 }; 
+    let p2 = { x: 0, y: 0 };
+
+    function initSize() {
         canvas.width = window.innerWidth;
         canvas.height = window.innerHeight;
-        p2.y = canvas.height - 80; 
+        p2.y = canvas.height - 60;
         p1.x = p2.x = canvas.width / 2 - paddleW / 2;
-        
-        // Сразу рисуем черный фон, чтобы не было пустоты
-        ctx.fillStyle = "#000";
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        render(); // Рисуем один кадр сразу
     }
 
-    function startGame(mode) {
+    window.addEventListener('resize', initSize);
+    initSize();
+
+    // Кнопки меню
+    document.getElementById('btn1').onclick = () => start(1);
+    document.getElementById('btn2').onclick = () => start(2);
+
+    function start(mode) {
         gameMode = mode;
         menu.style.display = 'none';
         isRunning = true;
-        p1.score = 0; p2.score = 0;
-        init();
+        p1Score = 0; p2Score = 0;
         prepareServe();
-        draw(); 
+        gameLoop();
     }
 
     function prepareServe() {
         isWaitingForServe = true;
         serveMsg.style.display = 'block';
         ball.x = canvas.width / 2;
-        ball.y = (servingPlayer === 1) ? p1.y + paddleH + 30 : p2.y - 30;
+        ball.y = (servingPlayer === 1) ? p1.y + paddleH + 20 : p2.y - 20;
         ball.dx = 0; ball.dy = 0;
-        if (gameMode === 1 && servingPlayer === 1) setTimeout(startCountdown, 1000);
+        if (gameMode === 1 && servingPlayer === 1) setTimeout(countDown, 1000);
     }
 
-    function startCountdown() {
+    function countDown() {
         if (!isWaitingForServe) return;
         isWaitingForServe = false;
         serveMsg.style.display = 'none';
-        let count = 3;
-        countdownEl.innerText = count;
-        const interval = setInterval(() => {
-            count--;
-            if (count > 0) countdownEl.innerText = count;
-            else if (count === 0) { countdownEl.innerText = "GO!"; launchBall(); }
-            else { clearInterval(interval); countdownEl.innerText = ""; }
+        let c = 3;
+        countdownEl.innerText = c;
+        let timer = setInterval(() => {
+            c--;
+            if (c > 0) countdownEl.innerText = c;
+            else if (c === 0) { countdownEl.innerText = "GO!"; ball.dx = (Math.random()>0.5?1:-1)*ballSpeed; ball.dy = (servingPlayer===1?1:-1)*ballSpeed; }
+            else { clearInterval(timer); countdownEl.innerText = ""; }
         }, 600);
     }
 
-    function launchBall() {
-        ball.dx = (Math.random() > 0.5 ? speed : -speed);
-        ball.dy = (servingPlayer === 1) ? speed : -speed;
-    }
-
-    window.addEventListener('touchstart', () => {
-        if (isWaitingForServe && (gameMode === 2 || (gameMode === 1 && servingPlayer === 2))) {
-            startCountdown();
-        }
+    window.addEventListener('touchstart', (e) => {
+        if (isWaitingForServe && (gameMode === 2 || servingPlayer === 2)) countDown();
     });
 
     window.addEventListener('touchmove', (e) => {
         for (let t of e.touches) {
-            if (gameMode === 2 && t.clientY < canvas.height * 0.4) p1.x = t.clientX - paddleW / 2;
-            else if (t.clientY > canvas.height * 0.6) p2.x = t.clientX - paddleW / 2;
+            if (t.clientY < canvas.height/2 && gameMode === 2) p1.x = t.clientX - paddleW/2;
+            if (t.clientY > canvas.height/2) p2.x = t.clientX - paddleW/2;
         }
     });
 
-    function draw() {
-        if (!isRunning) return;
+    function render() {
         ctx.fillStyle = "#000";
         ctx.fillRect(0, 0, canvas.width, canvas.height);
-
+        
         // Поле
-        ctx.strokeStyle = "rgba(0,255,255,0.2)";
-        ctx.lineWidth = 4;
-        ctx.strokeRect(5, 5, canvas.width - 10, canvas.height - 10);
+        ctx.strokeStyle = "#333";
+        ctx.lineWidth = 2;
+        ctx.strokeRect(5, 5, canvas.width-10, canvas.height-10);
 
         // Счет
         ctx.fillStyle = "rgba(255,255,255,0.2)";
-        ctx.font = "bold 80px Arial";
+        ctx.font = "60px Arial";
         ctx.textAlign = "center";
-        ctx.fillText(p1.score, canvas.width/2, canvas.height/2 - 50);
-        ctx.fillText(p2.score, canvas.width/2, canvas.height/2 + 130);
+        ctx.fillText(p1Score, canvas.width/2, canvas.height/2 - 40);
+        ctx.fillText(p2Score, canvas.width/2, canvas.height/2 + 80);
 
-        // Доски и мяч
+        // Игроки
         ctx.fillStyle = "#0ff"; ctx.fillRect(p1.x, p1.y, paddleW, paddleH);
         ctx.fillStyle = "#f06"; ctx.fillRect(p2.x, p2.y, paddleW, paddleH);
-        ctx.beginPath(); ctx.arc(ball.x, ball.y, ball.radius, 0, Math.PI*2);
-        ctx.fillStyle = "#fff"; ctx.fill();
+        
+        // Мяч
+        ctx.beginPath();
+        ctx.arc(ball.x, ball.y, ballRadius, 0, Math.PI*2);
+        ctx.fillStyle = "#fff";
+        ctx.fill();
+    }
+
+    function gameLoop() {
+        if (!isRunning) return;
+        render();
 
         if (!isWaitingForServe && countdownEl.innerText === "") {
-            if (gameMode === 1) p1.x += ((ball.x - paddleW/2) - p1.x) * 0.12;
+            if (gameMode === 1) p1.x += (ball.x - paddleW/2 - p1.x) * 0.15;
+            
             ball.x += ball.dx; ball.y += ball.dy;
-            if (ball.x < ball.radius || ball.x > canvas.width - ball.radius) ball.dx *= -1;
-            if (ball.y < p1.y + paddleH + ball.radius && ball.y > p1.y && ball.x > p1.x && ball.x < p1.x + paddleW) { ball.dy = speed; ball.y = p1.y + paddleH + ball.radius; }
-            if (ball.y > p2.y - ball.radius && ball.y < p2.y + paddleH && ball.x > p2.x && ball.x < p2.x + paddleW) { ball.dy = -speed; ball.y = p2.y - ball.radius; }
-            if (ball.y < -ball.radius) { p2.score++; servingPlayer = 1; checkWin(); }
-            else if (ball.y > canvas.height + ball.radius) { p1.score++; servingPlayer = 2; checkWin(); }
+
+            if (ball.x < ballRadius || ball.x > canvas.width - ballRadius) ball.dx *= -1;
+
+            if (ball.y < p1.y + paddleH + ballRadius && ball.y > p1.y && ball.x > p1.x && ball.x < p1.x + paddleW) { ball.dy = ballSpeed; ball.y = p1.y+paddleH+ballRadius; }
+            if (ball.y > p2.y - ballRadius && ball.y < p2.y + paddleH && ball.x > p2.x && ball.x < p2.x + paddleW) { ball.dy = -ballSpeed; ball.y = p2.y-ballRadius; }
+
+            if (ball.y < 0) { p2Score++; servingPlayer = 1; checkWin(); }
+            if (ball.y > canvas.height) { p1Score++; servingPlayer = 2; checkWin(); }
         }
-        requestAnimationFrame(draw);
+        requestAnimationFrame(gameLoop);
     }
 
     function checkWin() {
-        if (p1.score >= 8 || p2.score >= 8) {
-            alert(p1.score >= 8 ? "ВЕРХНИЙ ВЫИГРАЛ!" : "НИЖНИЙ ВЫИГРАЛ!");
-            location.reload(); 
+        if (p1Score >= 8 || p2Score >= 8) {
+            alert(p1Score >= 8 ? "ВЕРХНИЙ ПОБЕДИЛ" : "НИЖНИЙ ПОБЕДИЛ");
+            location.reload();
         } else prepareServe();
     }
-
-    init(); // Запуск инициализации сразу
+};
 </script>
 </body>
 </html>
